@@ -1,0 +1,1210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>正方体对面推理 · 展开与折叠</title>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <style>
+        /* ===== 全局重置 ===== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', 'PingFang SC', Roboto, system-ui, sans-serif;
+            background: #f0ecf9;
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+            color: #1e1b4b;
+            user-select: none;
+        }
+
+        /* ===== 3D 容器 ===== */
+        #three-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 0;
+            background: linear-gradient(145deg, #f5f0ff 0%, #e8e0f5 50%, #dfd6ee 100%);
+            cursor: grab;
+        }
+        #three-container:active {
+            cursor: grabbing;
+        }
+
+        /* ===== 顶层 UI ===== */
+        .ui-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 10;
+            pointer-events: none;
+        }
+        .ui-overlay>* {
+            pointer-events: auto;
+        }
+
+        /* ===== 顶部标题 ===== */
+        .header {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.70);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.50);
+            border-radius: 60px;
+            padding: 10px 28px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            box-shadow: 0 8px 32px rgba(99, 102, 241, 0.10), 0 2px 8px rgba(0, 0, 0, 0.04);
+            white-space: nowrap;
+            font-size: 14px;
+            z-index: 20;
+            color: #1e1b4b;
+        }
+        .header .badge {
+            background: linear-gradient(135deg, #818cf8, #6366f1);
+            padding: 4px 16px;
+            border-radius: 40px;
+            font-weight: 700;
+            font-size: 13px;
+            color: #fff;
+            box-shadow: 0 2px 12px rgba(99, 102, 241, 0.25);
+        }
+        .header h1 {
+            font-size: 20px;
+            font-weight: 700;
+            color: #1e1b4b;
+            background: linear-gradient(135deg, #4f46e5, #7c3aed);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .header .hint {
+            color: rgba(30, 27, 75, 0.40);
+            font-weight: 400;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+        }
+
+        /* ===== 左上角数字按钮面板 ===== */
+        .right-panel {
+            position: absolute;
+            left: 28px;
+            top: 80px;
+            background: rgba(255, 255, 255, 0.75);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.60);
+            border-radius: 28px;
+            padding: 18px 22px 22px;
+            box-shadow: 0 12px 48px rgba(99, 102, 241, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04);
+            min-width: 200px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            z-index: 15;
+        }
+        .right-panel .label {
+            font-size: 14px;
+            font-weight: 700;
+            color: rgba(30, 27, 75, 0.40);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-align: center;
+            border-bottom: 1px solid rgba(30, 27, 75, 0.06);
+            padding-bottom: 8px;
+        }
+        .right-panel .num-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+        .right-panel .num-btn {
+            padding: 12px 0;
+            border: none;
+            border-radius: 16px;
+            font-size: 30px;
+            font-weight: 800;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background: rgba(30, 27, 75, 0.04);
+            color: rgba(30, 27, 75, 0.60);
+            border: 2px solid rgba(30, 27, 75, 0.06);
+            text-align: center;
+            line-height: 1;
+            position: relative;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+            text-shadow: 0 1px 2px rgba(255, 255, 255, 0.5);
+        }
+        .right-panel .num-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            background: rgba(99, 102, 241, 0.10);
+            color: #4f46e5;
+            border-color: rgba(99, 102, 241, 0.20);
+            box-shadow: 0 8px 24px rgba(99, 102, 241, 0.12);
+        }
+        .right-panel .num-btn:active:not(:disabled) {
+            transform: translateY(0);
+        }
+        .right-panel .num-btn.used {
+            opacity: 0.25;
+            cursor: not-allowed;
+            transform: none !important;
+            filter: grayscale(1) brightness(0.6);
+            border-color: transparent;
+            pointer-events: none;
+        }
+        .right-panel .num-btn .small-label {
+            font-size: 9px;
+            font-weight: 400;
+            opacity: 0.4;
+            display: block;
+            margin-top: 2px;
+            letter-spacing: 0.5px;
+        }
+
+        .num-btn[data-num="1"] { color: #ef4444; }
+        .num-btn[data-num="2"] { color: #3b82f6; }
+        .num-btn[data-num="3"] { color: #22c55e; }
+        .num-btn[data-num="4"] { color: #f59e0b; }
+        .num-btn[data-num="5"] { color: #8b5cf6; }
+        .num-btn[data-num="6"] { color: #06b6d4; }
+        .num-btn[data-num]:hover:not(:disabled) {
+            color: #4f46e5 !important;
+        }
+
+        /* ===== 左下题目模块 ===== */
+        .left-panel {
+            position: absolute;
+            bottom: 28px;
+            left: 28px;
+            max-width: 320px;
+            min-width: 200px;
+            background: rgba(255, 255, 255, 0.78);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.60);
+            border-radius: 28px;
+            padding: 24px 20px 26px;
+            box-shadow: 0 12px 48px rgba(99, 102, 241, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04);
+            transition: all 0.3s ease;
+        }
+        .left-panel .q-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: rgba(30, 27, 75, 0.35);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 12px;
+            border-bottom: 1px solid rgba(30, 27, 75, 0.06);
+            padding-bottom: 10px;
+            text-align: center;
+        }
+        .left-panel .q-text {
+            font-size: 20px;
+            font-weight: 700;
+            line-height: 1.6;
+            color: #1e1b4b;
+            text-align: center;
+            margin-bottom: 14px;
+        }
+        .left-panel .q-text .num-badge {
+            display: inline-block;
+            padding: 0 8px;
+            border-radius: 6px;
+            font-weight: 900;
+        }
+        .left-panel .q-conditions {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 8px;
+            font-size: 16px;
+            color: #1e1b4b;
+            background: rgba(99, 102, 241, 0.06);
+            padding: 12px 16px;
+            border-radius: 14px;
+            border-left: 4px solid #818cf8;
+        }
+        .left-panel .q-conditions .cond {
+            display: block;
+            margin-right: 0;
+        }
+        .left-panel .q-conditions .cond .num {
+            font-weight: 900;
+        }
+        .left-panel .q-conditions .cond .highlight {
+            font-weight: 700;
+        }
+
+        /* ===== 底部状态 ===== */
+        .status-bar {
+            position: absolute;
+            bottom: 28px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.70);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.50);
+            border-radius: 40px;
+            padding: 8px 24px;
+            font-size: 14px;
+            color: rgba(30, 27, 75, 0.60);
+            display: flex;
+            align-items: center;
+            gap: 18px;
+            box-shadow: 0 8px 32px rgba(99, 102, 241, 0.06), 0 2px 8px rgba(0, 0, 0, 0.02);
+            pointer-events: auto;
+        }
+        .status-bar .progress {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .status-bar .progress .bar {
+            width: 100px;
+            height: 4px;
+            background: rgba(30, 27, 75, 0.08);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .status-bar .progress .bar .fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #818cf8, #6366f1);
+            border-radius: 4px;
+            transition: width 0.4s ease;
+        }
+        .status-bar .msg {
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        .status-bar .msg.success {
+            color: #16a34a;
+        }
+        .status-bar .msg.error {
+            color: #dc2626;
+        }
+        .status-bar .msg.info {
+            color: #4f46e5;
+        }
+
+        .btn-reset {
+            background: rgba(30, 27, 75, 0.06);
+            border: none;
+            border-radius: 30px;
+            padding: 4px 16px;
+            font-size: 13px;
+            font-weight: 600;
+            color: rgba(30, 27, 75, 0.50);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-family: inherit;
+        }
+        .btn-reset:hover {
+            background: rgba(99, 102, 241, 0.12);
+            color: #4f46e5;
+        }
+
+        /* ===== 面提示 ===== */
+        .face-hint {
+            position: absolute;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.70);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            padding: 6px 24px;
+            border-radius: 40px;
+            font-size: 14px;
+            color: rgba(30, 27, 75, 0.50);
+            border: 1px solid rgba(255, 255, 255, 0.50);
+            transition: all 0.3s ease;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 5;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+        }
+        .face-hint.show {
+            opacity: 1;
+        }
+
+        /* ===== 响应式 ===== */
+        @media (max-width: 1024px) {
+            .left-panel {
+                max-width: 280px;
+                min-width: 180px;
+                padding: 20px 16px 22px;
+            }
+            .left-panel .q-text {
+                font-size: 18px;
+            }
+            .left-panel .q-conditions {
+                font-size: 15px;
+                padding: 10px 14px;
+            }
+        }
+
+        @media (max-width: 820px) {
+            .header {
+                top: 12px;
+                padding: 6px 16px;
+                gap: 8px;
+                font-size: 12px;
+                flex-wrap: wrap;
+                justify-content: center;
+                white-space: normal;
+            }
+            .header h1 {
+                font-size: 16px;
+            }
+            .header .badge {
+                font-size: 11px;
+                padding: 2px 12px;
+            }
+            .header .hint {
+                font-size: 11px;
+            }
+
+            .right-panel {
+                left: 12px;
+                top: 72px;
+                padding: 14px 16px 16px;
+                min-width: 150px;
+                border-radius: 20px;
+                gap: 10px;
+            }
+            .right-panel .num-btn {
+                font-size: 26px;
+                padding: 10px 0;
+                border-radius: 14px;
+            }
+            .right-panel .num-btn .small-label {
+                font-size: 8px;
+            }
+
+            .left-panel {
+                left: 12px;
+                bottom: 12px;
+                max-width: 240px;
+                min-width: 160px;
+                padding: 16px 14px 18px;
+                border-radius: 20px;
+            }
+            .left-panel .q-text {
+                font-size: 16px;
+                line-height: 1.5;
+            }
+            .left-panel .q-conditions {
+                font-size: 14px;
+                padding: 8px 12px;
+                gap: 6px;
+            }
+            .left-panel .q-title {
+                font-size: 12px;
+                margin-bottom: 8px;
+                padding-bottom: 8px;
+            }
+
+            .status-bar {
+                bottom: 12px;
+                padding: 6px 14px;
+                font-size: 12px;
+                gap: 10px;
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+            .status-bar .progress .bar {
+                width: 60px;
+            }
+            .face-hint {
+                top: 68px;
+                font-size: 12px;
+                padding: 4px 16px;
+            }
+        }
+
+        @media (max-width: 500px) {
+            .header {
+                top: 8px;
+                padding: 4px 10px;
+                gap: 4px;
+                border-radius: 30px;
+            }
+            .header h1 {
+                font-size: 13px;
+            }
+            .header .badge {
+                font-size: 9px;
+                padding: 2px 8px;
+            }
+            .header .hint {
+                font-size: 9px;
+            }
+
+            .right-panel {
+                left: 8px;
+                top: 56px;
+                padding: 10px 12px 12px;
+                min-width: 100px;
+                border-radius: 16px;
+                gap: 8px;
+            }
+            .right-panel .label {
+                font-size: 10px;
+                padding-bottom: 4px;
+            }
+            .right-panel .num-grid {
+                gap: 6px;
+            }
+            .right-panel .num-btn {
+                font-size: 20px;
+                padding: 8px 0;
+                border-radius: 12px;
+            }
+            .right-panel .num-btn .small-label {
+                display: none;
+            }
+
+            .left-panel {
+                left: 8px;
+                bottom: 8px;
+                max-width: 180px;
+                min-width: 140px;
+                padding: 12px 12px 14px;
+                border-radius: 16px;
+            }
+            .left-panel .q-text {
+                font-size: 13px;
+                line-height: 1.4;
+                margin-bottom: 10px;
+            }
+            .left-panel .q-conditions {
+                font-size: 12px;
+                padding: 6px 10px;
+                gap: 4px;
+                border-left-width: 3px;
+            }
+            .left-panel .q-title {
+                font-size: 10px;
+                margin-bottom: 6px;
+                padding-bottom: 6px;
+            }
+
+            .status-bar {
+                bottom: 8px;
+                padding: 4px 10px;
+                font-size: 10px;
+                gap: 6px;
+                border-radius: 30px;
+            }
+            .status-bar .progress .bar {
+                width: 40px;
+                height: 3px;
+            }
+            .btn-reset {
+                font-size: 10px;
+                padding: 2px 10px;
+            }
+            .face-hint {
+                top: 48px;
+                font-size: 10px;
+                padding: 2px 12px;
+            }
+        }
+
+        .fade-in {
+            animation: fadeIn 0.6s ease forwards;
+        }
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .fade-in-d1 { animation-delay: 0.05s; opacity: 0; }
+        .fade-in-d2 { animation-delay: 0.12s; opacity: 0; }
+        .fade-in-d3 { animation-delay: 0.20s; opacity: 0; }
+    </style>
+</head>
+
+<body>
+
+    <div id="three-container"></div>
+
+    <div class="ui-overlay">
+
+        <!-- 顶部 -->
+        <div class="header fade-in fade-in-d1">
+            <span class="badge">🧊 五下</span>
+            <h1>展开与折叠 · 对面推理</h1>
+            <span class="hint"><span>🖱️</span> 拖拽旋转 · 滚轮缩放</span>
+        </div>
+
+        <!-- 面提示 -->
+        <div class="face-hint" id="faceHint">👆 点击正方体的面，再点数字标号</div>
+
+        <!-- 数字按钮面板（左上角） -->
+        <div class="right-panel fade-in fade-in-d3">
+            <div class="label">✧ 标 数 字</div>
+            <div class="num-grid" id="numGrid">
+                <button class="num-btn" data-num="1">1 <span class="small-label">点击</span></button>
+                <button class="num-btn" data-num="2">2 <span class="small-label">点击</span></button>
+                <button class="num-btn" data-num="3">3 <span class="small-label">点击</span></button>
+                <button class="num-btn" data-num="4">4 <span class="small-label">点击</span></button>
+                <button class="num-btn" data-num="5">5 <span class="small-label">点击</span></button>
+                <button class="num-btn" data-num="6">6 <span class="small-label">点击</span></button>
+            </div>
+        </div>
+
+        <!-- 左题目 -->
+        <div class="left-panel fade-in fade-in-d2">
+            <div class="q-title">📐 推理挑战</div>
+            <div class="q-text">
+                <span class="num-badge" style="color:#ef4444;">1</span>
+                <span class="num-badge" style="color:#3b82f6;">2</span>
+                <span class="num-badge" style="color:#22c55e;">3</span>
+                <span class="num-badge" style="color:#f59e0b;">4</span>
+                <span class="num-badge" style="color:#8b5cf6;">5</span>
+                <span class="num-badge" style="color:#06b6d4;">6</span>
+                <br />
+                标在六个面上
+            </div>
+            <div class="q-conditions">
+                <span class="cond">❶ <span class="num" style="color:#3b82f6;">2</span> 的对面是 <span class="num" style="color:#06b6d4;">6</span></span>
+                <span class="cond">❷ <span class="num" style="color:#ef4444;">1</span> 的对面 <strong>不是</strong> <span class="num" style="color:#8b5cf6;">5</span></span>
+                <span style="opacity:0.5;font-size:0.85em;margin-top:4px;">→ 点击面，再点数字</span>
+            </div>
+        </div>
+
+        <!-- 底部状态 -->
+        <div class="status-bar fade-in fade-in-d3">
+            <div class="progress">
+                <span id="progressText">0 / 6</span>
+                <div class="bar"><div class="fill" id="progressFill"></div></div>
+            </div>
+            <span class="msg" id="statusMsg">💡 点击面开始推理</span>
+            <button class="btn-reset" id="resetBtn">⟳ 重置</button>
+        </div>
+
+    </div>
+
+    <!-- ============================================================ -->
+    <script type="module">
+        // =============================================================
+        // 1. 导入
+        // =============================================================
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // =============================================================
+        // 2. DOM
+        // =============================================================
+        const container = document.getElementById('three-container');
+        const numBtns = document.querySelectorAll('.num-btn');
+        const statusMsg = document.getElementById('statusMsg');
+        const progressText = document.getElementById('progressText');
+        const progressFill = document.getElementById('progressFill');
+        const resetBtn = document.getElementById('resetBtn');
+        const faceHint = document.getElementById('faceHint');
+
+        // =============================================================
+        // 3. Three.js 场景
+        // =============================================================
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xf0ecf9);
+
+        const camera = new THREE.PerspectiveCamera(30, container.clientWidth / container.clientHeight, 0.1, 30);
+        camera.position.set(5.5, 4.0, 6.5);
+        camera.lookAt(0, 0, 0);
+
+        const renderer = new THREE.WebGLRenderer({
+            antialias: true,
+            alpha: false,
+            powerPreference: "high-performance"
+        });
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.0;
+        renderer.outputColorSpace = THREE.SRGBColorSpace;
+        container.appendChild(renderer.domElement);
+
+        // =============================================================
+        // 4. 环境贴图
+        // =============================================================
+        const pmremGenerator = new THREE.PMREMGenerator(renderer);
+        pmremGenerator.compileEquirectangularShader();
+
+        const envScene = new THREE.Scene();
+        envScene.background = new THREE.Color(0xe8e0f5);
+
+        const light1 = new THREE.HemisphereLight(0xffffff, 0x818cf8, 0.6);
+        envScene.add(light1);
+
+        const light2 = new THREE.DirectionalLight(0xffeedd, 0.8);
+        light2.position.set(3, 5, 4);
+        envScene.add(light2);
+
+        const light3 = new THREE.DirectionalLight(0xccddff, 0.4);
+        light3.position.set(-4, 2, -3);
+        envScene.add(light3);
+
+        const envTexture = pmremGenerator.fromScene(envScene, 0.04).texture;
+        scene.environment = envTexture;
+        pmremGenerator.dispose();
+
+        // =============================================================
+        // 5. 控制器
+        // =============================================================
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.10;
+        controls.minDistance = 3.0;
+        controls.maxDistance = 15;
+        controls.target.set(0, 0, 0);
+        controls.autoRotate = false;
+        controls.update();
+
+        // =============================================================
+        // 6. 灯光
+        // =============================================================
+        const ambient = new THREE.AmbientLight(0xccd5ff, 0.5);
+        scene.add(ambient);
+
+        const main = new THREE.DirectionalLight(0xfff5ee, 1.8);
+        main.position.set(5, 8, 6);
+        main.castShadow = true;
+        main.shadow.mapSize.width = 1024;
+        main.shadow.mapSize.height = 1024;
+        main.shadow.radius = 4;
+        scene.add(main);
+
+        const fill = new THREE.DirectionalLight(0x8888ff, 0.5);
+        fill.position.set(-5, 2, -4);
+        scene.add(fill);
+
+        const rim = new THREE.DirectionalLight(0xffffff, 0.3);
+        rim.position.set(-2, -3, 8);
+        scene.add(rim);
+
+        // =============================================================
+        // 7. 地面
+        // =============================================================
+        const ground = new THREE.Mesh(
+            new THREE.PlaneGeometry(12, 12),
+            new THREE.ShadowMaterial({
+                color: 0x6366f1,
+                opacity: 0.06,
+                transparent: true,
+            })
+        );
+        ground.rotation.x = -Math.PI / 2;
+        ground.position.y = -1.8;
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        const ringGeo = new THREE.RingGeometry(2.2, 2.8, 64);
+        const ringMat = new THREE.MeshBasicMaterial({
+            color: 0x818cf8,
+            transparent: true,
+            opacity: 0.06,
+            side: THREE.DoubleSide,
+            depthWrite: false,
+        });
+        const ring = new THREE.Mesh(ringGeo, ringMat);
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.y = -1.78;
+        scene.add(ring);
+
+        // =============================================================
+        // 8. 核心数据
+        // =============================================================
+        const BOX_SIZE = 2.8;
+        const FACE_NAMES = ['右', '左', '上', '下', '前', '后'];
+        const FACE_NORMALS = [
+            new THREE.Vector3(1, 0, 0),
+            new THREE.Vector3(-1, 0, 0),
+            new THREE.Vector3(0, 1, 0),
+            new THREE.Vector3(0, -1, 0),
+            new THREE.Vector3(0, 0, 1),
+            new THREE.Vector3(0, 0, -1),
+        ];
+
+        let faceNumbers = [0, 0, 0, 0, 0, 0];
+        let selectedFace = -1;
+
+        // 数字文字颜色（与之前一致）
+        const NUM_COLORS = {
+            1: '#ef4444',
+            2: '#3b82f6',
+            3: '#22c55e',
+            4: '#f59e0b',
+            5: '#8b5cf6',
+            6: '#06b6d4',
+        };
+
+        // ★★★ 加深后的面背景色 ★★★
+        const NUM_BG = {
+            1: '#fca5a5', // 原先 #fee2e2
+            2: '#93c5fd', // 原先 #dbeafe
+            3: '#86efac', // 原先 #dcfce7
+            4: '#fcd34d', // 原先 #fef3c7
+            5: '#c4b5fd', // 原先 #ede9fe
+            6: '#67e8f9', // 原先 #cffafe
+        };
+
+        // =============================================================
+        // 9. 纹理 - 使用加深的背景
+        // =============================================================
+        function createFaceTexture(num, size = 512) {
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+
+            const isBlank = (num === 0);
+
+            if (isBlank) {
+                ctx.fillStyle = '#e5e0ed';
+                ctx.fillRect(0, 0, size, size);
+                ctx.fillStyle = 'rgba(30,27,75,0.15)';
+                ctx.font = `${size * 0.45}px "Segoe UI", "PingFang SC", Arial, sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('?', size / 2, size / 2 + 4);
+                ctx.strokeStyle = 'rgba(30,27,75,0.08)';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(12, 12, size - 24, size - 24);
+            } else {
+                const bg = NUM_BG[num] || '#f0edff';
+                const grad = ctx.createRadialGradient(
+                    size * 0.3, size * 0.25, 0,
+                    size * 0.5, size * 0.5, size * 0.8
+                );
+                grad.addColorStop(0, '#ffffff');
+                grad.addColorStop(0.4, bg);
+                grad.addColorStop(1, bg);
+                ctx.fillStyle = grad;
+                ctx.fillRect(0, 0, size, size);
+
+                const r = 32,
+                    m = 14;
+                ctx.beginPath();
+                ctx.moveTo(m + r, m);
+                ctx.lineTo(size - m - r, m);
+                ctx.quadraticCurveTo(size - m, m, size - m, m + r);
+                ctx.lineTo(size - m, size - m - r);
+                ctx.quadraticCurveTo(size - m, size - m, size - m - r, size - m);
+                ctx.lineTo(m + r, size - m);
+                ctx.quadraticCurveTo(m, size - m, m, size - m - r);
+                ctx.lineTo(m, m + r);
+                ctx.quadraticCurveTo(m, m, m + r, m);
+                ctx.closePath();
+
+                ctx.shadowColor = 'rgba(0,0,0,0.04)';
+                ctx.shadowBlur = 12;
+                ctx.fillStyle = 'rgba(255,255,255,0.3)';
+                ctx.fill();
+                ctx.shadowColor = 'transparent';
+                ctx.shadowBlur = 0;
+                ctx.strokeStyle = 'rgba(30,27,75,0.08)';
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+
+                const color = NUM_COLORS[num] || '#1e1b4b';
+                ctx.shadowColor = 'rgba(0,0,0,0.10)';
+                ctx.shadowBlur = 14;
+                ctx.shadowOffsetX = 1;
+                ctx.shadowOffsetY = 1;
+                ctx.fillStyle = color;
+                ctx.font = `bold ${size * 0.50}px "Segoe UI", "PingFang SC", Arial, sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(num.toString(), size / 2, size / 2 + 4);
+
+                ctx.shadowColor = 'transparent';
+                ctx.shadowBlur = 0;
+                ctx.shadowOffsetX = 0;
+                ctx.shadowOffsetY = 0;
+                ctx.fillStyle = 'rgba(255,255,255,0.25)';
+                ctx.beginPath();
+                ctx.arc(size * 0.76, size * 0.22, 12, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.needsUpdate = true;
+            texture.colorSpace = THREE.SRGBColorSpace;
+            return texture;
+        }
+
+        // =============================================================
+        // 10. 正方体
+        // =============================================================
+        const geometry = new THREE.BoxGeometry(BOX_SIZE, BOX_SIZE, BOX_SIZE);
+        let cubeMesh = null;
+        let highlightMeshes = [];
+
+        function buildCube() {
+            if (cubeMesh) {
+                scene.remove(cubeMesh);
+                cubeMesh.geometry.dispose();
+                if (Array.isArray(cubeMesh.material)) {
+                    cubeMesh.material.forEach(m => m.dispose());
+                }
+            }
+            highlightMeshes.forEach(h => scene.remove(h));
+            highlightMeshes = [];
+
+            const materials = faceNumbers.map(num => {
+                const tex = createFaceTexture(num);
+                return new THREE.MeshPhysicalMaterial({
+                    map: tex,
+                    roughness: 0.25,
+                    metalness: 0.10,
+                    clearcoat: 0.05,
+                    clearcoatRoughness: 0.4,
+                    side: THREE.DoubleSide,
+                    envMap: envTexture,
+                    envMapIntensity: 0.8,
+                });
+            });
+
+            const mesh = new THREE.Mesh(geometry.clone(), materials);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            scene.add(mesh);
+            cubeMesh = mesh;
+
+            const edges = new THREE.EdgesGeometry(geometry);
+            const lineMat = new THREE.LineBasicMaterial({
+                color: 0x818cf8,
+                transparent: true,
+                opacity: 0.12,
+            });
+            const wireframe = new THREE.LineSegments(edges, lineMat);
+            mesh.add(wireframe);
+
+            updateHighlight();
+            updateUI();
+            return mesh;
+        }
+
+        // =============================================================
+        // 11. 高亮系统
+        // =============================================================
+        function updateHighlight() {
+            highlightMeshes.forEach(h => scene.remove(h));
+            highlightMeshes = [];
+
+            if (selectedFace < 0 || !cubeMesh) return;
+
+            const faceIdx = selectedFace;
+            const normal = FACE_NORMALS[faceIdx];
+            const center = normal.clone().multiplyScalar(BOX_SIZE / 2 + 0.02);
+
+            const w = BOX_SIZE * 0.92;
+            const h = BOX_SIZE * 0.92;
+            const shape = new THREE.Shape();
+            shape.moveTo(-w / 2, -h / 2);
+            shape.lineTo(w / 2, -h / 2);
+            shape.lineTo(w / 2, h / 2);
+            shape.lineTo(-w / 2, h / 2);
+            shape.closePath();
+
+            const edgeGeo = new THREE.EdgesGeometry(new THREE.ShapeGeometry(shape));
+            const edgeMat = new THREE.LineBasicMaterial({
+                color: 0x6366f1,
+                transparent: true,
+                opacity: 0.85,
+            });
+            const edgeLine = new THREE.LineSegments(edgeGeo, edgeMat);
+            const up = new THREE.Vector3(0, 1, 0);
+            const quat = new THREE.Quaternion().setFromUnitVectors(up, normal);
+            edgeLine.quaternion.copy(quat);
+            edgeLine.position.copy(center);
+            scene.add(edgeLine);
+            highlightMeshes.push(edgeLine);
+
+            const glowMat = new THREE.MeshBasicMaterial({
+                color: 0x818cf8,
+                transparent: true,
+                opacity: 0.05,
+                side: THREE.DoubleSide,
+                depthWrite: false,
+            });
+            const glowMesh = new THREE.Mesh(new THREE.PlaneGeometry(w * 1.1, h * 1.1), glowMat);
+            glowMesh.quaternion.copy(quat);
+            glowMesh.position.copy(center);
+            scene.add(glowMesh);
+            highlightMeshes.push(glowMesh);
+
+            const dirName = FACE_NAMES[faceIdx];
+            const hasNum = faceNumbers[faceIdx] !== 0;
+            const numText = hasNum ? `数字 ${faceNumbers[faceIdx]}` : '空';
+            faceHint.textContent = `📍 选中「${dirName}」面 (${numText}) · 点击数字标号`;
+            faceHint.classList.add('show');
+        }
+
+        // =============================================================
+        // 12. 更新纹理
+        // =============================================================
+        function updateFaceTexture(faceIdx) {
+            if (!cubeMesh) return;
+            const num = faceNumbers[faceIdx];
+            const tex = createFaceTexture(num);
+            const mat = cubeMesh.material[faceIdx];
+            if (mat) {
+                mat.map = tex;
+                mat.needsUpdate = true;
+            }
+        }
+
+        // =============================================================
+        // 13. 交互逻辑
+        // =============================================================
+        function assignNumber(faceIdx, num) {
+            for (let i = 0; i < 6; i++) {
+                if (i !== faceIdx && faceNumbers[i] === num) {
+                    faceNumbers[i] = 0;
+                    updateFaceTexture(i);
+                }
+            }
+            if (faceNumbers[faceIdx] === num) {
+                faceNumbers[faceIdx] = 0;
+            } else {
+                faceNumbers[faceIdx] = num;
+            }
+            updateFaceTexture(faceIdx);
+            updateUI();
+            updateHighlight();
+            checkCompletion();
+        }
+
+        function resetAll() {
+            faceNumbers = [0, 0, 0, 0, 0, 0];
+            selectedFace = -1;
+            faceHint.classList.remove('show');
+            buildCube();
+            updateUI();
+            statusMsg.textContent = '💡 已重置，点击面开始推理';
+            statusMsg.className = 'msg info';
+            numBtns.forEach(btn => btn.classList.remove('used'));
+        }
+
+        // =============================================================
+        // 14. 验证
+        // =============================================================
+        function checkCompletion() {
+            const filled = faceNumbers.filter(n => n !== 0).length;
+            progressText.textContent = `${filled} / 6`;
+            progressFill.style.width = `${(filled / 6) * 100}%`;
+
+            if (filled < 6) {
+                statusMsg.textContent = `✏️ 已标 ${filled} 个数字，继续推理...`;
+                statusMsg.className = 'msg info';
+                updateNumButtons();
+                return;
+            }
+
+            const idx2 = faceNumbers.indexOf(2);
+            const idx6 = faceNumbers.indexOf(6);
+            const cond1 = (idx2 >= 0 && idx6 >= 0 && isOpposite(idx2, idx6));
+            const idx1 = faceNumbers.indexOf(1);
+            const idx5 = faceNumbers.indexOf(5);
+            const cond2 = (idx1 >= 0 && idx5 >= 0 && !isOpposite(idx1, idx5));
+            const allUnique = new Set(faceNumbers).size === 6;
+
+            if (cond1 && cond2 && allUnique) {
+                statusMsg.textContent = '🎉 完全正确！你推理出了所有对面关系！';
+                statusMsg.className = 'msg success';
+                numBtns.forEach(btn => btn.classList.add('used'));
+            } else {
+                let errMsg = '';
+                if (!cond1) errMsg = '❌ 2 的对面不是 6，再想想！';
+                else if (!cond2) errMsg = '❌ 1 的对面是 5，不符合条件！';
+                else if (!allUnique) errMsg = '❌ 数字有重复，每个数字只能出现一次！';
+                statusMsg.textContent = errMsg || '❌ 再检查一下条件吧！';
+                statusMsg.className = 'msg error';
+                updateNumButtons();
+            }
+        }
+
+        function isOpposite(a, b) {
+            if (a === b) return false;
+            return FACE_NORMALS[a].dot(FACE_NORMALS[b]) < -0.5;
+        }
+
+        // =============================================================
+        // 15. UI 更新
+        // =============================================================
+        function updateUI() {
+            const filled = faceNumbers.filter(n => n !== 0).length;
+            progressText.textContent = `${filled} / 6`;
+            progressFill.style.width = `${(filled / 6) * 100}%`;
+            updateNumButtons();
+            if (filled === 6) checkCompletion();
+        }
+
+        function updateNumButtons() {
+            const used = new Set(faceNumbers.filter(n => n !== 0));
+            numBtns.forEach(btn => {
+                const num = parseInt(btn.dataset.num, 10);
+                btn.classList.toggle('used', used.has(num));
+            });
+        }
+
+        // =============================================================
+        // 16. 点击检测
+        // =============================================================
+        const raycaster = new THREE.Raycaster();
+        const pointer = new THREE.Vector2();
+
+        function onPointerDown(event) {
+            const rect = container.getBoundingClientRect();
+            pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+            raycaster.setFromCamera(pointer, camera);
+            if (!cubeMesh) return;
+            const intersects = raycaster.intersectObject(cubeMesh, false);
+
+            if (intersects.length > 0) {
+                const hit = intersects[0];
+                const normal = hit.face.normal.clone();
+                normal.transformDirection(cubeMesh.matrixWorld);
+                let maxDot = -Infinity;
+                let faceIdx = -1;
+                for (let i = 0; i < FACE_NORMALS.length; i++) {
+                    const d = normal.dot(FACE_NORMALS[i]);
+                    if (d > maxDot) { maxDot = d; faceIdx = i; }
+                }
+                if (faceIdx >= 0) {
+                    selectedFace = faceIdx;
+                    updateHighlight();
+                }
+            }
+        }
+
+        renderer.domElement.addEventListener('pointerdown', onPointerDown);
+
+        // =============================================================
+        // 17. 数字按钮事件
+        // =============================================================
+        numBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                if (selectedFace < 0) {
+                    statusMsg.textContent = '👆 请先点击正方体的一个面！';
+                    statusMsg.className = 'msg info';
+                    return;
+                }
+                const num = parseInt(btn.dataset.num, 10);
+                assignNumber(selectedFace, num);
+                updateNumButtons();
+            });
+        });
+
+        // =============================================================
+        // 18. 重置
+        // =============================================================
+        resetBtn.addEventListener('click', resetAll);
+
+        // =============================================================
+        // 19. 键盘快捷键
+        // =============================================================
+        document.addEventListener('keydown', (e) => {
+            if (e.key >= '1' && e.key <= '6') {
+                const num = parseInt(e.key, 10);
+                const btn = document.querySelector(`.num-btn[data-num="${num}"]`);
+                if (btn && !btn.classList.contains('used')) {
+                    btn.click();
+                }
+                e.preventDefault();
+            }
+            if (e.key === 'r' || e.key === 'R') {
+                resetBtn.click();
+                e.preventDefault();
+            }
+            if (e.key === 'Escape') {
+                selectedFace = -1;
+                updateHighlight();
+                faceHint.classList.remove('show');
+                e.preventDefault();
+            }
+        });
+
+        // =============================================================
+        // 20. 响应式
+        // =============================================================
+        function resizeRenderer() {
+            const w = container.clientWidth;
+            const h = container.clientHeight;
+            if (w > 0 && h > 0) {
+                camera.aspect = w / h;
+                camera.updateProjectionMatrix();
+                renderer.setSize(w, h);
+            }
+        }
+        window.addEventListener('resize', resizeRenderer);
+        const ro = new ResizeObserver(() => resizeRenderer());
+        ro.observe(container);
+
+        // =============================================================
+        // 21. 动画
+        // =============================================================
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // =============================================================
+        // 22. 初始化
+        // =============================================================
+        buildCube();
+        selectedFace = 0;
+        updateHighlight();
+        faceHint.textContent = '👆 点击正方体的面，再点数字标号';
+        faceHint.classList.add('show');
+        setTimeout(() => faceHint.classList.remove('show'), 3000);
+        resizeRenderer();
+
+        console.log('🌈 正方体颜色已加深，推理工具已加载！');
+        console.log('📌 点击面 → 选数字 (1-6)，R 重置，ESC 取消选中');
+    </script>
+
+</body>
+</html>
